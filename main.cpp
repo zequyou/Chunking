@@ -6,30 +6,33 @@
 
 using namespace std;
 
-#define DATA_LENGTH (3 * 1024)
-#define BLOCK_MAX (DATA_LENGTH / 2 / 1024)
-#define CHUNK_FIND_MAX (10)
 
+#define DATA_LENGTH (200273920)
+#define BLOCK_MAX (DATA_LENGTH / 3 / 1024)
+#define CHUNK_FIND_MAX (10)
 
 uint8_t data[DATA_LENGTH];
 block golden[BLOCK_MAX];
-uint8_t chunk_temp[CHUNK_SIZE_MAX * CHUNK_FIND_MAX];
+uint8_t chunk_temp[8192 * CHUNK_FIND_MAX];
 uint8_t *chunk_buffer[BLOCK_MAX];
 uint32_t chunk_length[BLOCK_MAX];
 uint32_t chunk_offset[BLOCK_MAX];
 
 int main(int argc, char *argv[]) {
-    for (auto &buffer: chunk_buffer) {
-        buffer = new uint8_t[CHUNK_SIZE_MAX];
-    }
-
     for (auto &block : golden) {
         block.offset = 0;
         block.length = 0;
     }
 
+    for (auto &buffer : chunk_buffer) {
+        buffer = new uint8_t[CHUNK_SIZE_MAX];
+    }
+
     ifstream input_stream;
-    input_stream.open("random.bin", ios::binary);
+    input_stream.open(argv[1], ios::binary);
+    if (input_stream.bad()) {
+        exit(1);
+    }
 
     // my chunking
     chunking my_chunking(&input_stream);
@@ -55,7 +58,7 @@ int main(int argc, char *argv[]) {
     cout << "function1 used " << clock() - start << " time" << endl;
     input_stream.close();
 
-    input_stream.open("random.bin", ios::binary);
+    input_stream.open(argv[1], ios::binary);
     input_stream.read((char *)data, DATA_LENGTH);
     input_stream.close();
     // golden
@@ -66,11 +69,13 @@ int main(int argc, char *argv[]) {
     uint32_t bias = 0;
     if (chunk_count != golden_chunk_count) {
         cerr << "chunk count mismatch" << endl;
-        exit(0);
+        cerr << "my chunk count mismatch " << chunk_count << endl;
+        cerr << "golden count mismatch " << golden_chunk_count << endl;
+        // exit(0);
     }
     for (uint32_t i = 0; i < chunk_count; i++) {
         if (golden[i].length != chunk_length[i]) {
-            cerr << "chunk length at index " << i << " mismatch!" << endl;
+            cerr << "chunk length at chunk " << i << " mismatch!" << endl;
             cerr << "my length " << chunk_length[i] << endl;
             cerr << "golden length " << golden[i].length << endl;
             exit(0);
