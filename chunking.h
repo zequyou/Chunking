@@ -5,6 +5,7 @@
 #ifndef CHUNKING_H
 #define CHUNKING_H
 
+#include <bits/stdc++.h>
 #include <cstdint>
 #include <cmath>
 #include <cstring>
