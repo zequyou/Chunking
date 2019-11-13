@@ -2,8 +2,8 @@
 // Created by developer on 11/3/19.
 //
 
-#ifndef ESE532_PROJECT_CHUNKING_H
-#define ESE532_PROJECT_CHUNKING_H
+#ifndef CHUNKING_H
+#define CHUNKING_H
 
 #include <cstdint>
 #include <cmath>
@@ -16,7 +16,7 @@ class chunking {
 public:
     static const uint32_t RAB_POLYNOMIAL_CONST = 153191;
     static const uint64_t POLY_MASK = 0xffffffffffULL;
-    static const uint32_t CHUNK_SIZE_MAX = 8 * 1024;
+    static const uint32_t CHUNK_SIZE_MAX = 6 * 1024;
     static const uint32_t CHUNK_SIZE_MIN = 3 * 1024 + 512;
     static const uint32_t CHUNK_SIZE_AVE = 4 * 1024;
     static const uint32_t CHUNK_JUMP_LEN = CHUNK_SIZE_MIN - 64;
@@ -164,7 +164,7 @@ private:
 
     // input data
     ifstream *input_stream;
-    uint8_t  remain_buffer[CHUNK_SIZE_AVE] = {0};
+    uint8_t remain_buffer[CHUNK_SIZE_AVE] = {0};
     uint32_t remain_length;
 
 public:
@@ -197,41 +197,38 @@ public:
             remain_length = 0;
         }
 
+        chunk_offset[0] = 0;
+        chunk_length[0] = 0;
+
         while (curr_chunk_index < chunk_max) {
-            // initialize chunk data structure
-            if (curr_chunk_index == 0) {
-                chunk_offset[curr_chunk_index] = 0;
-            } else {
-                chunk_offset[curr_chunk_index] = chunk_offset[curr_chunk_index - 1] + chunk_length[curr_chunk_index - 1];
+            // if we can not read byte, then go to exit
+            if (input_stream->eof() || input_stream->bad()) {
+                if (chunk_length[curr_chunk_index] > 0) {
+                    return curr_chunk_index + 1;
+                }
+                return curr_chunk_index;
             }
-            chunk_length[curr_chunk_index] = 0;
 
-            while (true) {
-                // if we can not read byte, then go to exit
-                if (input_stream->eof() || input_stream->bad()) {
-                    goto exit;
-                }
+            // read in byte till CHUNK_SIZE_AVE
+            if (curr_byte_max - curr_byte_ptr < CHUNK_SIZE_AVE) {
+                input_stream->read((char *) output + curr_byte_max, CHUNK_SIZE_AVE + curr_byte_ptr - curr_byte_max);
+                curr_byte_max += input_stream->gcount();
+            }
 
-                // read in byte till CHUNK_SIZE_AVE
-                if (curr_byte_max - curr_byte_ptr < CHUNK_SIZE_AVE) {
-                    input_stream->read((char *) output + curr_byte_max, CHUNK_SIZE_AVE + curr_byte_ptr - curr_byte_max);
-                    curr_byte_max += input_stream->gcount();
-                }
-
+            while (curr_byte_ptr < curr_byte_max) {
                 // if we don't have enough byte, just copy the byte
                 if (chunk_length[curr_chunk_index] + curr_byte_max - curr_byte_ptr < CHUNK_JUMP_LEN) {
                     chunk_length[curr_chunk_index] += curr_byte_max - curr_byte_ptr;
                     curr_byte_ptr = curr_byte_max;
-                    continue;
+                    break;
                 }
 
-                // copy the byte until chunk length arrive at CHUNK_SIZE_MIN
+                // jump the byte until chunk length arrive at CHUNK_JUMP_LEN
                 if (chunk_length[curr_chunk_index] < CHUNK_JUMP_LEN) {
                     curr_byte_ptr += CHUNK_JUMP_LEN - chunk_length[curr_chunk_index];
-                    chunk_length[curr_chunk_index] += CHUNK_JUMP_LEN;
+                    chunk_length[curr_chunk_index] = CHUNK_JUMP_LEN;
                 }
 
-                bool find_chunk = false;
                 while (curr_byte_ptr < curr_byte_max) {
                     uint8_t pushed_out = windows[windows_index];
                     windows[windows_index] = output[curr_byte_ptr];
@@ -251,33 +248,27 @@ public:
                     }
 
                     uint64_t cur_pos_checksum = cur_roll_checksum ^ir[pushed_out];
-                    if ((cur_pos_checksum & CHUNK_CHECKSUM_MASK) == 0 || chunk_length[curr_chunk_index] >= CHUNK_SIZE_MAX) {
-                        // copy current chunk
-                        find_chunk = true;
+                    if ((cur_pos_checksum & CHUNK_CHECKSUM_MASK) == 0 ||
+                        chunk_length[curr_chunk_index] >= CHUNK_SIZE_MAX) {
+                        curr_chunk_index++;
+
+                        if (curr_chunk_index == chunk_max) {
+                            // copy remain data to local buffer
+                            remain_length = curr_byte_max - curr_byte_ptr;
+                            memcpy(remain_buffer, output + curr_byte_ptr, remain_length);
+                            curr_byte_ptr = curr_byte_max;
+                        } else {
+                            // begin to find next chunk
+                            chunk_offset[curr_chunk_index] = chunk_offset[curr_chunk_index - 1] + chunk_length[curr_chunk_index - 1];
+                            chunk_length[curr_chunk_index] = 0;
+                        }
                         break;
                     }
-                }
-
-                if (find_chunk) {
-                    curr_chunk_index++;
-                    break;
                 }
             }
         }
 
-        exit:
-        remain_length = curr_byte_max - curr_byte_ptr;
-        if (remain_length > 0) {
-            memcpy(remain_buffer, output + curr_byte_ptr, remain_length);
-        }
-        if (curr_chunk_index == chunk_max) {
-            return chunk_max;
-        }
-        if (chunk_length[curr_chunk_index] == 0) {
-            return curr_chunk_index;
-        } else {
-            return curr_chunk_index + 1;
-        }
+        return curr_chunk_index;
     };
 };
 
