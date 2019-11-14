@@ -6,14 +6,12 @@
 
 using namespace std;
 
-
-#define DATA_LENGTH (200273920)
+#define DATA_LENGTH (69079040)
 #define BLOCK_MAX (DATA_LENGTH / 3 / 1024)
 #define CHUNK_FIND_MAX (10)
 
 uint8_t data[DATA_LENGTH];
 block golden[BLOCK_MAX];
-uint8_t chunk_temp[8192 * CHUNK_FIND_MAX];
 uint8_t *chunk_buffer[BLOCK_MAX];
 uint32_t chunk_length[BLOCK_MAX];
 uint32_t chunk_offset[BLOCK_MAX];
@@ -41,15 +39,9 @@ int main(int argc, char *argv[]) {
     clock_t start = clock();
     while (true) {
         uint32_t chunk_find = my_chunking.get_chunks(
-                chunk_temp,
-                chunk_offset + chunk_count,
+                chunk_buffer + chunk_count,
                 chunk_length + chunk_count,
                 CHUNK_FIND_MAX);
-        for (uint32_t i = 0; i < chunk_find; i++) {
-            memcpy(chunk_buffer[chunk_count + i],
-                    chunk_temp + chunk_offset[chunk_count + i],
-                    chunk_length[chunk_count + i]);
-        }
         chunk_count += chunk_find;
         if (chunk_find != 10) {
             break;

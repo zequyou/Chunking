@@ -10,7 +10,7 @@
 
 #define POLYNOMIAL_MASK (0xffffffffffULL)
 #define	POLYNOMIAL_CONST 153191
-const uint32_t CHUNK_SIZE_MAX = 6 * 1024;
+const uint32_t CHUNK_SIZE_MAX = 5760;
 const uint32_t CHUNK_SIZE_MIN = 3 * 1024 + 512;
 const uint32_t CHUNK_SIZE_AVE = 4 * 1024;
 const uint32_t CHUNK_CHECKSUM_MASK = ((1u << static_cast<uint8_t>(log2(CHUNK_SIZE_AVE - CHUNK_SIZE_MIN))) - 1u);

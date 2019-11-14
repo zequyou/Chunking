@@ -17,7 +17,7 @@ class chunking {
 public:
     static const uint32_t RAB_POLYNOMIAL_CONST = 153191;
     static const uint64_t POLY_MASK = 0xffffffffffULL;
-    static const uint32_t CHUNK_SIZE_MAX = 6 * 1024;
+    static const uint32_t CHUNK_SIZE_MAX = 5760;
     static const uint32_t CHUNK_SIZE_MIN = 3 * 1024 + 512;
     static const uint32_t CHUNK_SIZE_AVE = 4 * 1024;
     static const uint32_t CHUNK_JUMP_LEN = CHUNK_SIZE_MIN - 64;
@@ -156,7 +156,7 @@ private:
             10318993669ul, 11893858948ul, 9173756931ul, 6453654914ul,
     };
     static const uint32_t WINDOW_SIZE = 16;
-    static const uint32_t CHUNK_CHECKSUM_MASK = ((1u << (uint8_t) (log2(CHUNK_SIZE_AVE - CHUNK_SIZE_MIN))) - 1u);
+    const uint32_t CHUNK_CHECKSUM_MASK = ((1u << (uint8_t) (log2(CHUNK_SIZE_AVE - CHUNK_SIZE_MIN))) - 1u);
 
     // used to calculate the checksum
     uint8_t windows[WINDOW_SIZE]{};
@@ -165,7 +165,7 @@ private:
 
     // input data
     ifstream *input_stream;
-    uint8_t remain_buffer[CHUNK_SIZE_AVE] = {0};
+    uint8_t remain_buffer[CHUNK_SIZE_MAX] = {0};
     uint32_t remain_length;
 
 public:
@@ -186,20 +186,16 @@ public:
      * @param chunks chunk array for holding chunks
      * @return the number of chunk found in this iteration
      */
-    uint32_t get_chunks(uint8_t output[], uint32_t chunk_offset[], uint32_t chunk_length[], uint32_t chunk_max) {
+    uint32_t get_chunks(uint8_t *chunk_buffer[], uint32_t chunk_length[], uint32_t chunk_max) {
         uint32_t curr_chunk_index = 0;
         uint32_t curr_byte_ptr = 0;
-        uint32_t curr_byte_max = 0;
         bool read_complete = false;
 
         if (remain_length > 0) {
-            memcpy(output, remain_buffer, remain_length);
-            curr_byte_max += remain_length;
+            memcpy(chunk_buffer[0], remain_buffer, remain_length);
+            chunk_length[0] = remain_length;
             remain_length = 0;
         }
-
-        chunk_offset[0] = 0;
-        chunk_length[0] = 0;
 
         while (curr_chunk_index < chunk_max) {
             // if we can not read byte, then go to exit
@@ -210,58 +206,61 @@ public:
                 return curr_chunk_index;
             }
 
-            // read in byte till CHUNK_SIZE_AVE
-            if (curr_byte_max - curr_byte_ptr < CHUNK_SIZE_AVE) {
-                input_stream->read((char *) output + curr_byte_max, CHUNK_SIZE_AVE + curr_byte_ptr - curr_byte_max);
-                curr_byte_max += input_stream->gcount();
+            // read in byte till CHUNK_SIZE_MAX
+            if (chunk_length[curr_chunk_index] < CHUNK_SIZE_MAX) {
+                input_stream->read((char *) chunk_buffer[curr_chunk_index] + chunk_length[curr_chunk_index],
+                        CHUNK_SIZE_MAX - chunk_length[curr_chunk_index]);
+                chunk_length[curr_chunk_index] += input_stream->gcount();
             }
 
-            while (curr_byte_ptr < curr_byte_max) {
-                // if we don't have enough byte, just copy the byte
-                if (chunk_length[curr_chunk_index] + curr_byte_max - curr_byte_ptr < CHUNK_JUMP_LEN) {
-                    chunk_length[curr_chunk_index] += curr_byte_max - curr_byte_ptr;
-                    curr_byte_ptr = curr_byte_max;
+            while (curr_byte_ptr < chunk_length[curr_chunk_index]) {
+                // if we don't have enough byte, just break and read more data
+                if (chunk_length[curr_chunk_index] < CHUNK_JUMP_LEN) {
                     break;
                 }
 
                 // jump the byte until chunk length arrive at CHUNK_JUMP_LEN
-                if (chunk_length[curr_chunk_index] < CHUNK_JUMP_LEN) {
-                    curr_byte_ptr += CHUNK_JUMP_LEN - chunk_length[curr_chunk_index];
-                    chunk_length[curr_chunk_index] = CHUNK_JUMP_LEN;
+                if (curr_byte_ptr < CHUNK_JUMP_LEN) {
+                    curr_byte_ptr = CHUNK_JUMP_LEN;
                 }
 
-                while (curr_byte_ptr < curr_byte_max) {
+                while (curr_byte_ptr < chunk_length[curr_chunk_index]) {
                     uint8_t pushed_out = windows[windows_index];
-                    windows[windows_index] = output[curr_byte_ptr];
+                    windows[windows_index] = chunk_buffer[curr_chunk_index][curr_byte_ptr];
 
                     // update windows index
                     windows_index = ((windows_index + 1u) & (15u));
 
                     // update checksum
                     cur_roll_checksum = (cur_roll_checksum * RAB_POLYNOMIAL_CONST) & POLY_MASK;
-                    cur_roll_checksum += output[curr_byte_ptr];
+                    cur_roll_checksum += chunk_buffer[curr_chunk_index][curr_byte_ptr];
                     cur_roll_checksum -= out[pushed_out];
-                    chunk_length[curr_chunk_index]++;
                     curr_byte_ptr++;
 
-                    if (chunk_length[curr_chunk_index] < CHUNK_SIZE_MIN) {
+                    if (curr_byte_ptr < CHUNK_SIZE_MIN) {
                         continue;
                     }
 
                     uint64_t cur_pos_checksum = cur_roll_checksum ^ir[pushed_out];
-                    if ((cur_pos_checksum & CHUNK_CHECKSUM_MASK) == 0 ||
-                        chunk_length[curr_chunk_index] >= CHUNK_SIZE_MAX) {
+                    if ((cur_pos_checksum & CHUNK_CHECKSUM_MASK) == 0 || curr_byte_ptr == CHUNK_SIZE_MAX) {
                         curr_chunk_index++;
 
                         if (curr_chunk_index == chunk_max) {
                             // copy remain data to local buffer
-                            remain_length = curr_byte_max - curr_byte_ptr;
-                            memcpy(remain_buffer, output + curr_byte_ptr, remain_length);
-                            curr_byte_ptr = curr_byte_max;
+                            remain_length = chunk_length[curr_chunk_index - 1] - curr_byte_ptr;
+                            memcpy(remain_buffer,
+                                    chunk_buffer[curr_chunk_index - 1] + curr_byte_ptr,
+                                    remain_length);
+                            chunk_length[curr_chunk_index - 1] = curr_byte_ptr;
+                            curr_byte_ptr = chunk_length[curr_chunk_index - 1]; // to end the loop
                         } else {
                             // begin to find next chunk
-                            chunk_offset[curr_chunk_index] = chunk_offset[curr_chunk_index - 1] + chunk_length[curr_chunk_index - 1];
-                            chunk_length[curr_chunk_index] = 0;
+                            memcpy(chunk_buffer[curr_chunk_index],
+                                    chunk_buffer[curr_chunk_index - 1] + curr_byte_ptr,
+                                    chunk_length[curr_chunk_index - 1] - curr_byte_ptr);
+                            chunk_length[curr_chunk_index] = chunk_length[curr_chunk_index - 1] - curr_byte_ptr;
+                            chunk_length[curr_chunk_index - 1] = curr_byte_ptr;
+                            curr_byte_ptr = 0;
                         }
                         break;
                     }
