@@ -189,7 +189,6 @@ public:
     uint32_t get_chunks(uint8_t *chunk_buffer[], uint32_t chunk_length[], uint32_t chunk_max) {
         uint32_t curr_chunk_index = 0;
         uint32_t curr_byte_ptr = 0;
-        bool read_complete = false;
 
         if (remain_length > 0) {
             memcpy(chunk_buffer[0], remain_buffer, remain_length);
