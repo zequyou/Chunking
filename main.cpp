@@ -14,7 +14,6 @@ uint8_t data[DATA_LENGTH];
 block golden[BLOCK_MAX];
 uint8_t *chunk_buffer[BLOCK_MAX];
 uint32_t chunk_length[BLOCK_MAX];
-uint32_t chunk_offset[BLOCK_MAX];
 
 int main(int argc, char *argv[]) {
     for (auto &block : golden) {
@@ -85,23 +84,17 @@ int main(int argc, char *argv[]) {
     }
 
     uint64_t block_count = 0;
-    uint64_t chunk_6k_count = 0;
     uint64_t block_length_total = 0;
     for (int i = 0; i < BLOCK_MAX; i++) {
         if (golden[i].length == 0) {
             block_count = i + 1;
             break;
         }
-        if (golden[i].length >= 6 * 1024) {
-            chunk_6k_count++;
-        }
         block_length_total += golden[i].length;
     }
 
     printf("block average length %lu\n", block_length_total / block_count);
     printf("block count: %lu\n", block_count);
-    printf("block length greater than 6k: %lu\n", chunk_6k_count);
-    printf("percent %lf\n", (double)chunk_6k_count / block_count);
 
     return 0;
 }

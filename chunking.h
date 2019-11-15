@@ -251,7 +251,7 @@ public:
                                     chunk_buffer[curr_chunk_index - 1] + curr_byte_ptr,
                                     remain_length);
                             chunk_length[curr_chunk_index - 1] = curr_byte_ptr;
-                            curr_byte_ptr = chunk_length[curr_chunk_index - 1]; // to end the loop
+                            goto exit;
                         } else {
                             // begin to find next chunk
                             memcpy(chunk_buffer[curr_chunk_index],
@@ -267,6 +267,7 @@ public:
             }
         }
 
+        exit:
         return curr_chunk_index;
     };
 };
