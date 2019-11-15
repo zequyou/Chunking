@@ -164,13 +164,15 @@ private:
     uint64_t cur_roll_checksum = 0;
 
     // input data
-    int pipe_file;
+    int file_id;
+    int max_length;
     uint8_t remain_buffer[CHUNK_SIZE_MAX] = {0};
     uint32_t remain_length;
 
 public:
-    explicit chunking(int pipe_file) {
-        this->pipe_file = pipe_file;
+    explicit chunking(int file_id, int max_length) {
+        this->max_length = max_length;
+        this->file_id = file_id;
         remain_length = 0;
         for (unsigned char &window : windows) {
             window = 0;
@@ -199,12 +201,20 @@ public:
         while (curr_chunk_index < chunk_max) {
             // read in byte till CHUNK_SIZE_MAX
             if (chunk_length[curr_chunk_index] < CHUNK_SIZE_MAX) {
+                if (max_length == 0) {
+                    if (chunk_length[curr_chunk_index] > 0) {
+                        return curr_chunk_index + 1;
+                    }
+                    return curr_chunk_index;
+                }
+                uint32_t read_byte_count = max_length > (CHUNK_SIZE_MAX - chunk_length[curr_chunk_index]) ?
+                                           (CHUNK_SIZE_MAX - chunk_length[curr_chunk_index]) : max_length;
                 int byte_count = read(
-                        pipe_file,
+                        file_id,
                         (char *) chunk_buffer[curr_chunk_index] + chunk_length[curr_chunk_index],
-                        CHUNK_SIZE_MAX - chunk_length[curr_chunk_index]);
+                        read_byte_count);
                 // if we can not read byte, then go to exit
-                if (byte_count == 0 || byte_count ==  -1) {
+                if (byte_count == 0 || byte_count == -1) {
                     cout << "read exit" << endl;
                     if (chunk_length[curr_chunk_index] > 0) {
                         return curr_chunk_index + 1;
@@ -212,6 +222,7 @@ public:
                     return curr_chunk_index;
                 }
                 chunk_length[curr_chunk_index] += byte_count;
+                max_length -= byte_count;
             }
 
             while (curr_byte_ptr < chunk_length[curr_chunk_index]) {
