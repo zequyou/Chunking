@@ -164,13 +164,13 @@ private:
     uint64_t cur_roll_checksum = 0;
 
     // input data
-    ifstream *input_stream;
+    int pipe_file;
     uint8_t remain_buffer[CHUNK_SIZE_MAX] = {0};
     uint32_t remain_length;
 
 public:
-    explicit chunking(ifstream *input_stream) {
-        this->input_stream = input_stream;
+    explicit chunking(int pipe_file) {
+        this->pipe_file = pipe_file;
         remain_length = 0;
         for (unsigned char &window : windows) {
             window = 0;
@@ -197,19 +197,21 @@ public:
         }
 
         while (curr_chunk_index < chunk_max) {
-            // if we can not read byte, then go to exit
-            if (input_stream->eof() || input_stream->bad()) {
-                if (chunk_length[curr_chunk_index] > 0) {
-                    return curr_chunk_index + 1;
-                }
-                return curr_chunk_index;
-            }
-
             // read in byte till CHUNK_SIZE_MAX
             if (chunk_length[curr_chunk_index] < CHUNK_SIZE_MAX) {
-                input_stream->read((char *) chunk_buffer[curr_chunk_index] + chunk_length[curr_chunk_index],
+                int byte_count = read(
+                        pipe_file,
+                        (char *) chunk_buffer[curr_chunk_index] + chunk_length[curr_chunk_index],
                         CHUNK_SIZE_MAX - chunk_length[curr_chunk_index]);
-                chunk_length[curr_chunk_index] += input_stream->gcount();
+                // if we can not read byte, then go to exit
+                if (byte_count == 0 || byte_count ==  -1) {
+                    cout << "read exit" << endl;
+                    if (chunk_length[curr_chunk_index] > 0) {
+                        return curr_chunk_index + 1;
+                    }
+                    return curr_chunk_index;
+                }
+                chunk_length[curr_chunk_index] += byte_count;
             }
 
             while (curr_byte_ptr < chunk_length[curr_chunk_index]) {
